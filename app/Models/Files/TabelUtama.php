@@ -1,0 +1,25 @@
+<?php
+
+namespace App\Models\Files;
+
+use Illuminate\Database\Eloquent\Model;
+use App\Models\Submission;
+
+class TabelUtama extends Model
+{
+    //
+    protected $table = 'tabel_utama';
+    protected $fillable = [
+        'submission_id',
+        'path',
+        'kode_tabel',
+        'status',
+        'matra',
+        'updated_at',
+        'catatan_admin',
+    ];
+    public function submission()
+    {
+        return $this->belongsTo(Submission::class);
+    }
+}
