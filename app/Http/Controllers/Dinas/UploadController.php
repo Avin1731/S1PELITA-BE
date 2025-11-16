@@ -11,10 +11,25 @@ use Illuminate\Support\Facades\Storage;
 use App\Models\Files\Iklh;  
 class UploadController extends Controller
 {
+    private const DLH_DISK = 'dlh';
+    private const LEGACY_DISK = 'public';
+
     protected $DocumentFinalizer;
     public function __construct(\App\Services\DocumentFinalizer $DocumentFinalizer)
     {
         $this->DocumentFinalizer = $DocumentFinalizer;
+    }
+    private function deleteExistingPath(?string $path): void
+    {
+        if (! $path) {
+            return;
+        }
+
+        foreach ([self::DLH_DISK, self::LEGACY_DISK] as $disk) {
+            if (Storage::disk($disk)->exists($path)) {
+                Storage::disk($disk)->delete($path);
+            }
+        }
     }
     public function uploadRingkasanEksekutif(Request $request)
     {
@@ -31,15 +46,15 @@ class UploadController extends Controller
         $id_dinas = $submission->id_dinas;
         
         $existing = RingkasanEksekutif::where('submission_id', $submission->id)->first();
-        if ($existing && Storage::disk('public')->exists($existing->path)) {
-            Storage::disk('public')->delete($existing->path);
+        if ($existing) {
+            $this->deleteExistingPath($existing->path);
         }
 
         $folder = "uploads/{$tahun}/dlh_{$id_dinas}/ringkasan_eksekutif";
         $path = $request->file('file')->storeAs(
             $folder,
             "{$id_dinas}.{$tahun}.{$request->file('file')->getClientOriginalExtension()}",
-            'public' 
+            self::DLH_DISK 
         );
 
         if ($existing) {
@@ -77,15 +92,15 @@ class UploadController extends Controller
         $id_dinas = $submission->id_dinas;
         
         $existing = LaporanUtama::where('submission_id', $submission->id)->first();
-        if ($existing && Storage::disk('public')->exists($existing->path)) {
-            Storage::disk('public')->delete($existing->path);
+        if ($existing) {
+            $this->deleteExistingPath($existing->path);
         }
     
         $folder = "uploads/{$tahun}/dlh_{$id_dinas}/laporan_utama";
         $path = $request->file('file')->storeAs(
             $folder,
             "{$id_dinas}.{$tahun}.{$request->file('file')->getClientOriginalExtension()}",
-            'public' 
+            self::DLH_DISK 
         );
     
         if ($existing) {
@@ -130,14 +145,14 @@ class UploadController extends Controller
         $existing = TabelUtama::where(['submission_id'=> $submission->id,'kode_tabel'=> $kode_tabel])->first();
         $matra= $existing ? $existing->matra : $request->input('matra');
         
-        if ($existing && Storage::disk('public')->exists($existing->path)) {
-            Storage::disk('public')->delete($existing->path);
+        if ($existing) {
+            $this->deleteExistingPath($existing->path);
         }
         $folder = "uploads/{$tahun}/dlh_{$id_dinas}/tabel_utama/{$matra}";
         $path = $request->file('file')->storeAs(
             $folder,
             "{$id_dinas}.{$tahun}.{$kode_tabel}.{$request->file('file')->getClientOriginalExtension()}",
-            'public' 
+            self::DLH_DISK 
         );
         if ($existing) {
             $existing->update([
@@ -161,7 +176,7 @@ class UploadController extends Controller
         ]);
 
     } 
-    public function Iklh(Request $request)
+    public function uploadIklh(Request $request)
     {   
         $request->validate([
             'indeks_kualitas_air' => 'required|numeric|min:0|max:100',
@@ -225,6 +240,7 @@ class UploadController extends Controller
     public function finalizeSubmission(Request $request)
     {
         // Logic for finalizing submission
+      
         $submission = $request->submission->load('ringkasanEksekutif', 'laporanUtama', 'tabelUtama', 'iklh');
        
         if($submission->status=='finalized' || $submission->status=='approved'){
@@ -233,12 +249,14 @@ class UploadController extends Controller
             ], 403);
         }
         try{
-
             $this->DocumentFinalizer->finalizeall([
-                'ringkasanEksekutif'=>$submission->ringkasanEksekutif->first(),
-                'laporanUtama'=>$submission->laporanUtama->first(),
-                'tabelUtama'=>$submission->tabelUtama->first(),
-                'iklh'=>$submission->iklh->first(),
+                'ringkasanEksekutif'=>$submission->ringkasanEksekutif,
+                'laporanUtama'=>$submission->laporanUtama,
+                'tabelUtama'=>['document'=>$submission->tabelUtama, 'expected_count'=>2],
+                'iklh'=>$submission->iklh,
+            ]);
+            $submission->update([
+                'status'=>'finalized',
             ]);
             return response()->json([
                 'message' => 'Submission berhasil difinalisasi.',
@@ -251,5 +269,27 @@ class UploadController extends Controller
             ], 400);
         }
     }
+    public function finalizeOne(Request $request,$type){
+
+        $submission = $request->submission->load($type);
+        try{
+            $document = $submission->$type;
+            if($document instanceof \Illuminate\Support\Collection || is_array($document)){
+                $modelClass = $submission->$type()->getModel()::class;
+               $count= $modelClass::MIN_COUNT ?? null;
+               $this->DocumentFinalizer->finalizecollection($document,$type,$count);
+            }else{
+                $this->DocumentFinalizer->finalize($document,$type);
+            }
+            return response()->json([
+                'message' => "$type berhasil difinalisasi.",
+            ]);
+        }catch(\Exception $e){
+            return response()->json([
+                'message' => "Gagal memfinalisasi $type. ",
+                'error' => $e->getMessage(),
+            ], 400);
+        }
+
 }
- 
+}

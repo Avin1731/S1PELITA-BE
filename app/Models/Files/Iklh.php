@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Iklh extends Model
 {
+
     //
     protected $table = 'iklh';
     protected $fillable = [
@@ -22,5 +23,8 @@ class Iklh extends Model
     public function submission()
     {
         return $this->belongsTo(Submission::class);
+    }
+    public function finalize(){
+        app('App\Services\DocumentFinalizer')->finalize($this,'iklh');
     }
 }

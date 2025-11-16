@@ -19,4 +19,7 @@ class RingkasanEksekutif extends Model
     {
         return $this->belongsTo(Submission::class);
     }
+    public function finalize(){
+        app('App\Services\DocumentFinalizer')->finalize($this,'ringkasanEksekutif');    
+    }
 }

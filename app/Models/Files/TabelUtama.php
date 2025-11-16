@@ -18,8 +18,12 @@ class TabelUtama extends Model
         'updated_at',
         'catatan_admin',
     ];
+    public const MIN_COUNT=2;
     public function submission()
     {
         return $this->belongsTo(Submission::class);
+    }
+    public function finalize(){
+        app('App\Services\DocumentFinalizer')->finalize($this,'tabelUtama'.$this->kode_tabel);
     }
 }

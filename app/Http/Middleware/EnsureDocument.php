@@ -13,8 +13,9 @@ class EnsureDocument
      *
      * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
      */
-    public function handle(Request $request, Closure $next,string $docType): Response
+    public function handle(Request $request, Closure $next,$docType = null): Response
     {
+        $docType=$docType??$request->route('type');
         $submission = $request->submission;
 
     if (!method_exists($submission, $docType)) {

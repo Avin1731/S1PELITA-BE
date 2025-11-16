@@ -38,6 +38,38 @@ return [
             'report' => false,
         ],
 
+        'templates' => [
+            'driver' => 'local',
+            'root' => storage_path('app/templates'),
+            'serve' => true,
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'dlh' => [
+            'driver' => 'local',
+            'root' => storage_path('app/dlh'),
+            'serve' => true,
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'pusdatin' => [
+            'driver' => 'local',
+            'root' => storage_path('app/pusdatin'),
+            'serve' => true,
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'pusdatin' => [
+            'driver' => 'local',
+            'root' => storage_path('app/pusdatin'),
+            'serve' => true,
+            'throw' => false,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

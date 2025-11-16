@@ -32,7 +32,7 @@ return new class extends Migration
                 'Risiko Bencana',
                 'Penetapan Isu Prioritas'
             ]);
-            $table->enum('status', ['draft', 'finalized', 'rejected', 'approved'])->default('draft');
+            $table->enum('status', ['draft', 'finalized'])->default('draft');
             $table->text('catatan_admin')->nullable();
 
             $table->timestamps();
