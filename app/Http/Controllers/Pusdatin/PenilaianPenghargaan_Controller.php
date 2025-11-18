@@ -133,6 +133,13 @@ class PenilaianPenghargaan_Controller extends Controller
             "status"=>$penilaianPenghargaan->status
         ],200);
     }
+    public function getAllPenilaianPenghargaanParsed(Request $request,PenilaianPenghargaan $penilaianPenghargaan){
+        $penilaian = PenilaianPenghargaan::with('penilaianPenghargaanParsed')->orderByDesc('year')->get();
+        return response()->json([
+            'message' => 'Semua data Penilaian Penghargaan beserta hasil parsing berhasil ditemukan.',
+            'data' => $penilaian
+        ],200);
+    }
     
     public function finalizePenilaianPenghargaan(Request $request,PenilaianPenghargaan $penilaianPenghargaan){
         $penilaianPenghargaan->update([

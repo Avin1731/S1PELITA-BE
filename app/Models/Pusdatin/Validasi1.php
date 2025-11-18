@@ -25,8 +25,18 @@ class Validasi1 extends Model
     {
         return $this->belongsTo(PenilaianPenghargaan::class, 'penilaian_penghargaan_ref_id');
     }
-    public function Validasi1Parsed()
+    public function validasi1Parsed()
     {
         return $this->hasMany(Validasi1Parsed::class, 'validasi_1_id');
-    }   
+    }
+    
+    public function validasi2()
+    {
+        return $this->hasOne(Validasi2::class, 'validasi_1_id');
+    }
+    
+    public function finalizedBy()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'finalized_by');
+    }
 }
