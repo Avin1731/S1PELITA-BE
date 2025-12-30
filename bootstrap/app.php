@@ -12,6 +12,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        
+        // --- HAPUS ATAU KOMENTARI BARIS INI ---
+        // $middleware->statefulApi(); 
+        // --------------------------------------
+
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
             'ensuresubmissions'=> \App\Http\Middleware\EnsureSubmissions::class,
