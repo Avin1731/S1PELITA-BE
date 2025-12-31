@@ -8,15 +8,6 @@ use App\Http\Controllers\Dinas\UploadController;
 use App\Http\Controllers\Pusdatin\PenilaianSLHD_Controller;
 use App\http\Controllers\Pusdatin\PenilaianPenghargaan_Controller;
 
-Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
-    return $request->user();
-});
-
-// Ubah dari PUT ke GET
-Route::get('/analytics/visit', function () {
-    return response()->json(['visits' => 1234]); 
-});
-
 Route::post('/login', [App\Http\Controllers\Auth\AuthController::class, 'login']);
 Route::post('/register', [App\Http\Controllers\Auth\AuthController::class, 'register']);
 Route::post('/logout', [App\Http\Controllers\Auth\AuthController::class, 'logout'])->middleware('auth:sanctum');
