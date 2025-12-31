@@ -107,6 +107,10 @@ Route::middleware(['auth:sanctum','role:admin'])->group(function () {
         Route::delete('/admin/users/reject/{id}', [AdminController::class, 'rejectUser']);
         Route::delete('/admin/users/{id}', [AdminController::class, 'deleteUser']);
         Route::post('/admin/users/pusdatin', [AdminController::class, 'createPusdatin']);
+        
+        // [BARU] Endpoint Log System (Wajib ada agar frontend bisa ambil data)
+        Route::get('/admin/logs/system', [AdminController::class, 'getSystemLogs']);
+
         Route::get('/admin/{role}/{status}',[AdminController::class,'showUser']);
         Route::get('/admin/track/{year?}/{pusdatin_id?}',[AdminController::class,'trackingHistoryPusdatin']);
         
