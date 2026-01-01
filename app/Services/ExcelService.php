@@ -158,7 +158,8 @@ public function generateTemplatePenilaianPenghargaan(array $eligible,array $mult
         $sheet->setCellValue("M{$r}", "=L{$r} * VLOOKUP(\"proper\", inject!A:B, 2, FALSE)");
 
         // =============== KALTAPARU ===============
-        $sheet->setCellValue("P{$r}", "=O{$r} * VLOOKUP(\"kaltaparu\", inject!A:B, 2, FALSE)");
+        // $sheet->setCellValue("P{$r}", "=O{$r} * VLOOKUP(\"kaltaparu\", inject!A:B, 2, FALSE)");
+        $sheet->setCellValue("P{$r}", 3);
     }
 
     //LOCK SHEET BIAR G SEMBARANGAN DIUBAH

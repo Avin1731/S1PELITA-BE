@@ -16,6 +16,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RegionSeeder::class,
             DinasSeeder::class,
+            UpdateHasPesisirSeeder::class,
+            TestingDataSeeder::class,
         ]);   
         // User::factory(10)->create();
 

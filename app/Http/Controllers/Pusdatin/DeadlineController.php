@@ -24,7 +24,9 @@ class DeadlineController extends Controller
 
         return response()->json([
             'year' => $year,
-            'data' => $deadline
+            'deadline' => $deadline->deadline_at ?? null,
+            'catatan' => $deadline->catatan ?? null,
+            'is_passed' => $deadline ? $deadline->isPassed() : null
         ]);
     }
 
@@ -47,31 +49,27 @@ class DeadlineController extends Controller
 
         DB::beginTransaction();
         try {
-            // Nonaktifkan deadline lama untuk submission year yang sama
-            Deadline::where([
-                'year' => $request->year,
-                'stage' => 'submission',
-                'is_active' => true
-            ])->update([
-                'is_active' => false,
-                'updated_by' => $request->user()->id
-            ]);
-
-            // Buat deadline baru
-            $deadline = Deadline::create([
-                'year' => $request->year,
-                'stage' => 'submission',
-                'deadline_at' => $request->deadline_at,
-                'is_active' => true,
-                'created_by' => $request->user()->id,
-                'catatan' => $request->catatan,
-            ]);
+            // Update or create deadline untuk year dan stage ini
+            // Hanya 1 record per year per stage, no history tracking needed
+            $deadline = Deadline::updateOrCreate(
+                [
+                    'year' => $request->year,
+                    'stage' => 'submission',
+                ],
+                [
+                    'deadline_at' => $request->deadline_at,
+                    'is_active' => true,
+                    'catatan' => $request->catatan,
+                    'created_by' => $request->user()->id,
+                    'updated_by' => $request->user()->id,
+                ]
+            );
 
             DB::commit();
 
             return response()->json([
                 'message' => 'Deadline submission berhasil diatur.',
-                'data' => $deadline->load(['creator'])
+                'data' => $deadline->load(['creator', 'updater'])
             ]);
         } catch (\Exception $e) {
             DB::rollBack();

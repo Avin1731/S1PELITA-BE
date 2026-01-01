@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Files\LaporanUtama;
 use App\Models\Files\RingkasanEksekutif;
 use App\Models\Files\TabelUtama;
+use App\Models\Files\Lampiran;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Files\Iklh;
@@ -124,6 +125,52 @@ class UploadController extends Controller
         ]);
         // Logic for uploading Laporan Utama
     }
+    
+    public function uploadLampiran(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:pdf|max:10240', 
+        ],[
+            'file.required' => 'File lampiran wajib diunggah.',
+            'file.mimes' => 'File harus berformat PDF.',
+            'file.max' => 'Ukuran file maksimal 10 MB.',
+        ]);
+        
+        $submission = $request->submission;
+        $tahun = $submission->tahun;
+        $id_dinas = $submission->id_dinas;
+        
+        $existing = Lampiran::where('submission_id', $submission->id)->first();
+        if ($existing) {
+            $this->deleteExistingPath($existing->path);
+        }
+    
+        $folder = "uploads/{$tahun}/dlh_{$id_dinas}/lampiran";
+        $path = $request->file('file')->storeAs(
+            $folder,
+            "{$id_dinas}.{$tahun}.{$request->file('file')->getClientOriginalExtension()}",
+            self::DLH_DISK 
+        );
+    
+        if ($existing) {
+            $existing->update([
+                'path' => $path,
+                'status' => 'draft',
+            ]);
+        } else {
+            Lampiran::create([
+                'submission_id' => $submission->id,
+                'status' => 'draft',
+                'path' => $path,
+            ]);
+        }
+        
+        return response()->json([
+            'message' => $existing ? 'File berhasil diganti' : 'File berhasil diupload',
+            'path' => $path,
+        ]);
+    }
+    
     public function uploadTabelUtama(Request $request)
     {   
         $request->validate([
@@ -317,7 +364,7 @@ class UploadController extends Controller
     {
         // Logic for finalizing submission
       
-        $submission = $request->submission->load('ringkasanEksekutif', 'laporanUtama', 'tabelUtama', 'iklh');
+        $submission = $request->submission->load('ringkasanEksekutif', 'laporanUtama', 'lampiran', 'tabelUtama', 'iklh');
        
         if($submission->status=='finalized' || $submission->status=='approved'){
             return response()->json([
@@ -328,6 +375,7 @@ class UploadController extends Controller
             $this->DocumentFinalizer->finalizeall([
                 'ringkasanEksekutif'=>$submission->ringkasanEksekutif,
                 'laporanUtama'=>$submission->laporanUtama,
+                'lampiran'=>$submission->lampiran,
                 'tabelUtama'=>['document'=>$submission->tabelUtama, 'expected_count'=>TabelUtama::MIN_COUNT],
                 'iklh'=>$submission->iklh,
             ]);
@@ -375,29 +423,42 @@ class UploadController extends Controller
     {
         $submission = $request->submission->load([
             'ringkasanEksekutif',
-            'laporanUtama', 
+            'laporanUtama',
+            'lampiran',
             'tabelUtama',
             'iklh'
         ]);
 
         $statusDokumen = [];
 
-        // Status Ringkasan Eksekutif
+        // Status Ringkasan Eksekutif (Buku 1)
         $ringkasanExists = $submission->ringkasanEksekutif !== null;
         $statusDokumen[] = [
-            'jenis_dokumen' => 'Ringkasan Eksekutif',
+            'nama' => 'ringkasanEksekutif',
+            'jenis_dokumen' => 'Ringkasan Eksekutif (Buku 1)',
             'status_upload' => $ringkasanExists ? 'Dokumen Diunggah' : 'Belum Diunggah',
             'tanggal_upload' => $ringkasanExists ? $submission->ringkasanEksekutif->updated_at->format('d-m-Y') : null,
             'status' => $ringkasanExists ? $submission->ringkasanEksekutif->status : '-',
         ];
 
-        // Status Laporan Utama
+        // Status Laporan Utama (Buku 2)
         $laporanExists = $submission->laporanUtama !== null;
         $statusDokumen[] = [
-            'jenis_dokumen' => 'Laporan Utama',
+            'nama' => 'laporanUtama',
+            'jenis_dokumen' => 'Laporan Utama (Buku 2)',
             'status_upload' => $laporanExists ? 'Dokumen Diunggah' : 'Belum Diunggah',
             'tanggal_upload' => $laporanExists ? $submission->laporanUtama->updated_at->format('d-m-Y') : null,
             'status' => $laporanExists ? $submission->laporanUtama->status : '-',
+        ];
+        
+        // Status Lampiran (Buku 3)
+        $lampiranExists = $submission->lampiran !== null;
+        $statusDokumen[] = [
+            'nama' => 'lampiran',
+            'jenis_dokumen' => 'Lampiran (Buku 3)',
+            'status_upload' => $lampiranExists ? 'Dokumen Diunggah' : 'Belum Diunggah',
+            'tanggal_upload' => $lampiranExists ? $submission->lampiran->updated_at->format('d-m-Y') : null,
+            'status' => $lampiranExists ? $submission->lampiran->status : '-',
         ];
 
         // Status Tabel Utama
@@ -418,6 +479,7 @@ class UploadController extends Controller
         }
 
         $statusDokumen[] = [
+            'nama' => 'tabelUtama',
             'jenis_dokumen' => 'SLHD Tabel Utama',
             'status_upload' => $tabelUtamaExists ? 'Dokumen Diunggah' : 'Belum Diunggah',
             'tanggal_upload' => $tabelUtamaUploadDate ? $tabelUtamaUploadDate->format('d-m-Y') : null,
@@ -618,6 +680,8 @@ class UploadController extends Controller
             $document = $submission->ringkasanEksekutif;
         } elseif ($documentType === 'laporan-utama') {
             $document = $submission->laporanUtama;
+        } elseif ($documentType === 'lampiran') {
+            $document = $submission->lampiran;
         }
 
         if (!$document) {
@@ -653,6 +717,8 @@ class UploadController extends Controller
             $document = $submission->ringkasanEksekutif;
         } elseif ($documentType === 'laporan-utama') {
             $document = $submission->laporanUtama;
+        } elseif ($documentType === 'lampiran') {
+            $document = $submission->lampiran;
         }
 
         if (!$document) {

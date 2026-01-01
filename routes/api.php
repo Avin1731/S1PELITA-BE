@@ -70,9 +70,9 @@ Route::get('/register/dinas/kabkota/{provinceId}', function ($provinceId) {
 // Public route untuk download/preview dokumen (tidak perlu auth karena dibuka di new tab)
 Route::prefix('document')->group(function () {
     Route::get('/preview/{submission}/{documentType}', [App\Http\Controllers\Pusdatin\ReviewController::class, 'previewDocument'])
-        ->where('documentType', 'ringkasan-eksekutif|laporan-utama');
+        ->where('documentType', 'ringkasan-eksekutif|laporan-utama|lampiran');
     Route::get('/download/{submission}/{documentType}', [App\Http\Controllers\Pusdatin\ReviewController::class, 'downloadDocument'])
-        ->where('documentType', 'ringkasan-eksekutif|laporan-utama');
+        ->where('documentType', 'ringkasan-eksekutif|laporan-utama|lampiran');
 });
 
 // Route::get('pusdatin/penilaian/penghargaan/template/{year}',  [PenilaianPenghargaan_Controller::class, 'downloadTemplate']);
@@ -103,6 +103,21 @@ Route::middleware(['auth:sanctum','role:admin'])->group(function () {
         
         // Get list pusdatin untuk dropdown
         Route::get('/admin/pusdatin/approved', [AdminController::class, 'showUser'])->defaults('role', 'pusdatin')->defaults('status', 'approved');
+
+        Route::prefix('admin/deadline')->controller(App\Http\Controllers\Pusdatin\DeadlineController::class)->group(function () {
+            Route::get('/date/{year?}', 'index'); // Get deadline submission
+            Route::post('/set', 'setDeadline'); // Set/update deadline submission
+            Route::delete('/{id}', 'deleteDeadline'); // Delete deadline
+        });
+        
+        // Unfinalize endpoints - hanya admin yang bisa unfinalize
+        Route::prefix('admin/unfinalize')->group(function () {
+            Route::patch('/slhd/{year}', [App\Http\Controllers\Pusdatin\PenilaianSLHD_Controller::class, 'unfinalized']);
+            Route::patch('/penghargaan/{year}', [App\Http\Controllers\Pusdatin\PenilaianPenghargaan_Controller::class, 'unfinalized']);
+            Route::patch('/validasi-1/{year}', [App\Http\Controllers\Pusdatin\Validasi_1_Controller::class, 'unfinalize']);
+            Route::patch('/validasi-2/{year}', [App\Http\Controllers\Pusdatin\Validasi_2_Controller::class, 'unfinalize']);
+            Route::patch('/wawancara/{year}', [App\Http\Controllers\Pusdatin\WawancaraController::class, 'unfinalize']);
+        });
     });
 
 Route::middleware(['auth:sanctum', 'role:provinsi,kabupaten/kota', 'ensuresubmissions'])
@@ -112,6 +127,8 @@ Route::middleware(['auth:sanctum', 'role:provinsi,kabupaten/kota', 'ensuresubmis
         ->middleware(['ensuredocument:ringkasanEksekutif', 'checkdeadline:submission']);
     Route::post('/laporan-utama', [UploadController::class, 'uploadLaporanUtama'])
         ->middleware(['ensuredocument:laporanUtama', 'checkdeadline:submission']);
+    Route::post('/lampiran', [UploadController::class, 'uploadLampiran'])
+        ->middleware(['ensuredocument:lampiran', 'checkdeadline:submission']);
     Route::post('/tabel-utama', [UploadController::class, 'uploadTabelUtama'])
         ->middleware(['ensuredocument:tabelUtama', 'checkdeadline:submission']);
     Route::post('/iklh', [UploadController::class, 'uploadIklh'])
@@ -128,14 +145,14 @@ Route::middleware(['auth:sanctum', 'role:provinsi,kabupaten/kota', 'ensuresubmis
     
     // Preview & Download dokumen sendiri (termasuk draft)
     Route::get('/preview/{documentType}', [UploadController::class, 'previewDocument'])
-        ->where('documentType', 'ringkasan-eksekutif|laporan-utama');
+        ->where('documentType', 'ringkasan-eksekutif|laporan-utama|lampiran');
     Route::get('/download/{documentType}', [UploadController::class, 'downloadDocument'])
-        ->where('documentType', 'ringkasan-eksekutif|laporan-utama');
+        ->where('documentType', 'ringkasan-eksekutif|laporan-utama|lampiran');
     
     Route::patch('/finalize-submission', [UploadController::class, 'finalizeSubmission'])
         ->middleware('checkdeadline:submission');
     Route::patch('/finalize/{type}', [UploadController::class, 'finalizeOne'])
-        ->where('type', 'ringkasanEksekutif|laporanUtama|tabelUtama|iklh')
+        ->where('type', 'ringkasanEksekutif|laporanUtama|lampiran|tabelUtama|iklh')
         ->middleware(['ensuredocument', 'checkdeadline:submission']);
 });
 
@@ -190,28 +207,27 @@ Route::middleware(['auth:sanctum', 'role:pusdatin'])->prefix('pusdatin/review')-
     // Get detail dokumen per tipe (untuk lazy loading)
     Route::get('/submission/{submission}/ringkasan-eksekutif', [App\Http\Controllers\Pusdatin\ReviewController::class, 'showRingkasanEksekutif']);
     Route::get('/submission/{submission}/laporan-utama', [App\Http\Controllers\Pusdatin\ReviewController::class, 'showLaporanUtama']);
+    Route::get('/submission/{submission}/lampiran', [App\Http\Controllers\Pusdatin\ReviewController::class, 'showLampiran']);
     Route::get('/submission/{submission}/tabel-utama', [App\Http\Controllers\Pusdatin\ReviewController::class, 'showTabelUtama']);
     Route::get('/submission/{submission}/tabel-utama/{tabelId}/download', [App\Http\Controllers\Pusdatin\ReviewController::class, 'downloadTabelUtama']);
     
     // Preview dokumen (inline PDF untuk iframe)
     Route::get('/submission/{submission}/preview/{documentType}', [App\Http\Controllers\Pusdatin\ReviewController::class, 'previewDocument'])
-        ->where('documentType', 'ringkasan-eksekutif|laporan-utama');
+        ->where('documentType', 'ringkasan-eksekutif|laporan-utama|lampiran');
     
     // Download dokumen (force download)
     Route::get('/submission/{submission}/download/{documentType}', [App\Http\Controllers\Pusdatin\ReviewController::class, 'downloadDocument'])
-        ->where('documentType', 'ringkasan-eksekutif|laporan-utama');
+        ->where('documentType', 'ringkasan-eksekutif|laporan-utama|lampiran');
     
     // Review dokumen
     Route::post('/submission/{submission}/{documentType}', [App\Http\Controllers\Pusdatin\ReviewController::class, 'reviewDocument'])
-        ->where('documentType', 'ringkasanEksekutif|laporanUtama|iklh');
+        ->where('documentType', 'ringkasanEksekutif|laporanUtama|lampiran|iklh');
     
     // IKLH Review - data IKLH per submission yang sudah finalized
     Route::get('/iklh/{year?}', [App\Http\Controllers\Pusdatin\ReviewController::class, 'indexIKLH']);
     Route::post('/iklh/{submission}', [App\Http\Controllers\Pusdatin\ReviewController::class, 'reviewIKLH']);
 });     
-Route::get('/test-clean', function() {
-    return response()->json(['status' => 'clean']);
-});
+
 
 Route::middleware(['auth:sanctum', 'role:pusdatin'])->prefix('pusdatin/penilaian')->group(function () {
     
@@ -231,7 +247,6 @@ Route::middleware(['auth:sanctum', 'role:pusdatin'])->prefix('pusdatin/penilaian
         Route::get('/parsed/{penilaianSLHD}', 'getAllParsedPenilaianSLHD');
         Route::patch('/finalize/{penilaianSLHD}', 'finalizePenilaianSLHD')
             ->middleware(['ensureevaluation:finalize,penilaian_slhd', 'checkdeadline:penilaian_slhd']);
-        Route::patch('/unfinalize/{year}', 'unfinalized');
     });
 
     // Penilaian Penghargaan
@@ -244,7 +259,6 @@ Route::middleware(['auth:sanctum', 'role:pusdatin'])->prefix('pusdatin/penilaian
         Route::get('/parsed/{penilaianPenghargaan}', 'getAllPenilaianPenghargaanParsed');
         Route::patch('/finalize/{penilaianPenghargaan}', 'finalizePenilaianPenghargaan')
             ->middleware(['ensureevaluation:finalize,penilaian_penghargaan', 'checkdeadline:penilaian_penghargaan']);
-        Route::patch('/unfinalize/{year}', 'unfinalized');
     });
 
     // Validasi 1
@@ -252,7 +266,6 @@ Route::middleware(['auth:sanctum', 'role:pusdatin'])->prefix('pusdatin/penilaian
         Route::get('/{year}', 'index');
         Route::patch('/{year}/finalize', 'finalize')
             ->middleware(['ensureevaluation:finalize,validasi_1', 'checkdeadline:validasi_1']);
-        Route::patch('/{year}/unfinalize', 'unfinalize');
     });
 
     // Validasi 2
@@ -261,7 +274,6 @@ Route::middleware(['auth:sanctum', 'role:pusdatin'])->prefix('pusdatin/penilaian
         Route::patch('/{validasi2Parsed}/checklist', 'updateCheklist');
         Route::post('/{year}/finalize', 'finalize')
             ->middleware(['ensureevaluation:finalize,validasi_2', 'checkdeadline:validasi_2']);
-        Route::patch('/{year}/unfinalize', 'unfinalize');
         Route::get('/{year}/ranked', 'ranked');
         Route::post('/{year}/create-wawancara', 'createWawancara'); // Create wawancara dengan top N
     });
@@ -272,7 +284,6 @@ Route::middleware(['auth:sanctum', 'role:pusdatin'])->prefix('pusdatin/penilaian
         Route::patch('/{wawancara}/nilai', 'updateNilai'); // Update nilai wawancara
         Route::patch('/{year}/finalize', 'finalize') // Finalize wawancara & hitung total skor final
             ->middleware('checkdeadline:wawancara');
-        Route::patch('/{year}/unfinalize', 'unfinalize'); // Unfinalize wawancara
     });
 
     // Rekap Penilaian (Optional - untuk endpoint khusus rekap)
@@ -281,12 +292,7 @@ Route::middleware(['auth:sanctum', 'role:pusdatin'])->prefix('pusdatin/penilaian
         Route::get('/{year}/dinas/{idDinas}', 'show');
     });
 
-    // Deadline Management (Submission only)
-    Route::prefix('deadline')->controller(App\Http\Controllers\Pusdatin\DeadlineController::class)->group(function () {
-        Route::get('/{year?}', 'index'); // Get deadline submission
-        Route::post('/set', 'setDeadline'); // Set/update deadline submission
-        Route::delete('/{id}', 'deleteDeadline'); // Delete deadline
-    });
+   
 
     // Tahapan Penilaian Management
     Route::prefix('tahapan')->controller(App\Http\Controllers\Pusdatin\TahapanPenilaianController::class)->group(function () {
