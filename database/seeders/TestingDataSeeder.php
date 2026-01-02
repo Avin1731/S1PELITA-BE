@@ -15,6 +15,7 @@ use App\Models\Files\LaporanUtama;
 use App\Models\Files\TabelUtama;
 use App\Models\Files\Iklh;
 use App\Helpers\MatraConstants;
+use App\Models\Files\Lampiran;
 
 class TestingDataSeeder extends Seeder
 {
@@ -39,7 +40,7 @@ class TestingDataSeeder extends Seeder
             
             // 3. Seed Submissions & Documents untuk N dinas
             $this->command->info('📄 Creating submissions & documents...');
-            $dinasCount = $this->seedSubmissionsAndDocuments(77, 2025); // 77 dinas pertama
+            $dinasCount = $this->seedSubmissionsAndDocuments(100, 2026); // 100 dinas pertama
             
             DB::commit();
             
@@ -67,9 +68,25 @@ class TestingDataSeeder extends Seeder
                 'is_active' => true,
             ]
         );
+        User::firstOrCreate(
+            ['email' => 'admin2@test.com'],
+            [
+                'password' => Hash::make('password'),
+                'role' => 'admin',
+                'is_active' => true,
+            ]
+        );
 
         User::firstOrCreate(
             ['email' => 'pusdatin@test.com'],
+            [
+                'password' => Hash::make('password'),
+                'role' => 'pusdatin',
+                'is_active' => true,
+            ]
+        );
+        User::firstOrCreate(
+            ['email' => 'pusdatin2@test.com'],
             [
                 'password' => Hash::make('password'),
                 'role' => 'pusdatin',
@@ -122,6 +139,10 @@ class TestingDataSeeder extends Seeder
         
         // Source files path (relative dari disk 'templates')
         $sourcePdf = 'slhd/buku1/erd.pdf';
+        $sourcePdf1 = 'slhd/buku1/erd.pdf';
+        $sourcePdf2 = 'slhd/buku2/erd.pdf';
+        $sourcePdf3 = 'slhd/buku3/erd.pdf';
+
         
         // Validasi source PDF exist
         if (!$templateDisk->exists($sourcePdf)) {
@@ -177,11 +198,19 @@ class TestingDataSeeder extends Seeder
             
             // 2. Laporan Utama (copy PDF dari templates ke dlh)
             $laporanPath = "{$basePath}/laporan_utama/laporan_{$dinasId}_{$year}.pdf";
-            $dlhDisk->put($laporanPath, $templateDisk->get($sourcePdf));
+            $dlhDisk->put($laporanPath, $templateDisk->get($sourcePdf2));
             
             LaporanUtama::create([
                 'submission_id' => $submission->id,
                 'path' => $laporanPath,
+                'status' => 'finalized',
+            ]);
+
+            $lampiranPath = "{$basePath}/lampiran/lampiran_{$dinasId}_{$year}.pdf";
+            $dlhDisk->put($lampiranPath, $templateDisk->get($sourcePdf3));
+            Lampiran::create([
+                'submission_id' => $submission->id,
+                'path' => "{$basePath}/lampiran/lampiran_{$dinasId}_{$year}.pdf",
                 'status' => 'finalized',
             ]);
             
@@ -189,11 +218,11 @@ class TestingDataSeeder extends Seeder
             Iklh::create([
                 'submission_id' => $submission->id,
                 'status' => 'finalized',
-                'indeks_kualitas_air' => rand(50, 100),
-                'indeks_kualitas_udara' => rand(50, 100),
-                'indeks_kualitas_lahan' => rand(50, 100),
-                'indeks_kualitas_pesisir_laut' => rand(50, 100),
-                'indeks_kualitas_kehati' => rand(50, 100),
+                'indeks_kualitas_air' => rand(70, 100),
+                'indeks_kualitas_udara' => rand(70, 100),
+                'indeks_kualitas_lahan' => rand(70, 100),
+                'indeks_kualitas_pesisir_laut' => rand(70, 100),
+                'indeks_kualitas_kehati' => rand(70, 100),
             ]);
             
             // 4. Tabel Utama (80 files dari MatraConstants)

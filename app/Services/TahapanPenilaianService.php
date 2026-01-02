@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Pusdatin\RekapPenilaian;
 use App\Models\TahapanPenilaianStatus;
 use Illuminate\Support\Facades\Log;
 
@@ -129,12 +130,18 @@ class TahapanPenilaianService
             if (isset($mapping[$stage])) {
                 $config = $mapping[$stage];
                 
+                // Delete cascade records sebelum reset rekap
+                $this->deleteCascadeRecords($stage, $year);
+                
                 $tahapanStatus->update([
                     'tahap_aktif' => $config['tahap'],
                     'pengumuman_terbuka' => $config['pengumuman'], // Ikuti konfigurasi tahap yang dikembalikan
                     'keterangan' => $config['keterangan'],
                     'tahap_selesai_at' => null
                 ]);
+                
+                // Reset penilaian sesuai tahap yang di-unfinalize
+                $this->resetPenilaianTahap($stage, $year);
 
                 Log::info("Tahapan penilaian dikembalikan setelah unfinalize", [
                     'year' => $year,
@@ -143,6 +150,7 @@ class TahapanPenilaianService
                     'pengumuman_terbuka' => $config['pengumuman']
                 ]);
             }
+
         } catch (\Exception $e) {
             Log::error("Gagal update tahapan penilaian setelah unfinalize", [
                 'stage' => $stage,
@@ -151,6 +159,103 @@ class TahapanPenilaianService
             ]);
         }
     }
+
+    /**
+     * Reset penilaian sesuai tahap yang di-unfinalize
+     */
+    public function resetPenilaianTahap(string $stage, int $year)
+    {
+        $stageOrder = [
+            'submission',
+            'penilaian_slhd',
+            'penilaian_penghargaan',
+            'validasi_1',
+            'validasi_2',
+            'wawancara',
+        ];
+
+        $stageFields = [
+            'submission' => [],
+
+            'penilaian_slhd' => [
+                'nilai_slhd',
+                'lolos_slhd',
+            ],
+
+            'penilaian_penghargaan' => [
+                'nilai_penghargaan',
+                'masuk_penghargaan',
+            ],
+
+            'validasi_1' => [
+                'nilai_iklh',
+                'total_skor_validasi1',
+                'lolos_validasi1',
+            ],
+
+            'validasi_2' => [
+                'kriteria_wtp',
+                'kriteria_kasus_hukum',
+                'lolos_validasi2',
+                'peringkat',
+            ],
+
+            'wawancara' => [
+                'nilai_wawancara',
+                'lolos_wawancara',
+                'total_skor_final',
+                'peringkat_final',
+            ],
+        ];
+
+        // Mapping status_akhir setelah unfinalize suatu tahap
+        // Key = stage yang di-unfinalize, Value = status_akhir yang harus di-set
+        $statusAfterUnfinalize = [
+            'penilaian_slhd'        => 'menunggu_penilaian_slhd',
+            'penilaian_penghargaan' => 'menunggu_penilaian_penghargaan',           // Kembali ke setelah lolos SLHD
+            'validasi_1'            => 'menunggu_validasi1',    // Kembali ke setelah lolos penghargaan
+            'validasi_2'            => 'menunggu_validasi2',      // Kembali ke setelah lolos validasi1
+            'wawancara'             => 'menunggu_wawancara',      // Kembali ke setelah lolos validasi2
+        ];
+
+        $currentIndex = array_search($stage, $stageOrder);
+
+        if ($currentIndex === false) {
+            throw new \InvalidArgumentException('Stage tidak valid');
+        }
+
+        // Field yang harus di-reset (SEMUA setelah stage ini)
+        $fieldsToReset = [];
+
+        for ($i = $currentIndex - 1; $i < count($stageOrder); $i++) {
+            $nextStage = $stageOrder[$i];
+            $fieldsToReset = array_merge(
+                $fieldsToReset,
+                $stageFields[$nextStage]
+            );
+        }
+
+        if (empty($fieldsToReset)) {
+            return;
+        }
+
+        // Tentukan default reset
+        $resetData = [];
+        foreach ($fieldsToReset as $field) {
+            if (str_starts_with($field, 'lolos') || str_starts_with($field, 'masuk')) {
+                $resetData[$field] = false;
+            } else {
+                $resetData[$field] = null;
+            }
+        }
+
+        // Set status_akhir sesuai mapping
+        $newStatus = $statusAfterUnfinalize[$stage] ?? 'menunggu_penilaian_slhd';
+        $resetData['status_akhir'] = $newStatus;
+
+        RekapPenilaian::where('year', $year)->update($resetData);
+    }
+
 
     /**
      * Toggle pengumuman untuk tahap saat ini
@@ -195,5 +300,54 @@ class TahapanPenilaianService
                 'tahap_mulai_at' => now()
             ]
         );
+    }
+
+    /**
+     * Delete cascade records saat unfinalize
+     */
+    private function deleteCascadeRecords(string $stage, int $year): void
+    {
+        switch ($stage) {
+            case 'penilaian_slhd':
+                // Delete template file
+                \Storage::disk('templates')->delete("penilaian/template_penilaian_penghargaan_{$year}.xlsx");
+                
+                // Delete PenilaianPenghargaan (cascade to Validasi1 & Validasi2 via FK)
+                \App\Models\Pusdatin\PenilaianPenghargaan::where('year', $year)->delete();
+                
+                // Delete Wawancara (no FK cascade)
+                \App\Models\Pusdatin\Wawancara::where('year', $year)->delete();
+                break;
+
+            case 'penilaian_penghargaan':
+                // Delete Validasi1 (cascade to Validasi2 via FK)
+                \App\Models\Pusdatin\Validasi1::where('year', $year)->delete();
+                
+                // Delete Wawancara (no FK cascade)
+                \App\Models\Pusdatin\Wawancara::where('year', $year)->delete();
+                break;
+
+            case 'validasi_1':
+                // Delete Validasi2
+                \App\Models\Pusdatin\Validasi2::where('year', $year)->delete();
+                
+                // Delete Wawancara (no FK cascade)
+                \App\Models\Pusdatin\Wawancara::where('year', $year)->delete();
+                break;
+
+            case 'validasi_2':
+                // Delete Wawancara (no FK cascade)
+                \App\Models\Pusdatin\Wawancara::where('year', $year)->delete();
+                break;
+
+            case 'wawancara':
+                // Wawancara reset handled by resetFinalScores in controller
+                break;
+        }
+
+        Log::info("Deleted cascade records for stage unfinalize", [
+            'stage' => $stage,
+            'year' => $year
+        ]);
     }
 }

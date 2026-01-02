@@ -43,11 +43,23 @@ return new class extends Migration
             // Peringkat sementara (dari validasi 2)
             $table->integer('peringkat')->nullable();
             $table->enum('status_akhir', [
+                'menunggu_penilaian_slhd',
+                'lolos_slhd',
                 'tidak_lolos_slhd', 
-                'tidak_masuk_penghargaan', 
+                'menunggu_penilaian_penghargaan',
+                'lolos_penghargaan',
+                'tidak_lolos_penghargaan', 
+                'menunggu_validasi1',
+                'lolos_validasi1',
                 'tidak_lolos_validasi1', 
-                'tidak_lolos_validasi2', 
-                'lolos_final'
+                'menunggu_validasi2',
+                'lolos_validasi2',
+                'tidak_lolos_validasi2',
+                'menunggu_wawancara',
+                // 'lolos_wawancara', 
+                // 'tidak_lolos_wawancara',
+                'selesai'
+                // 'lolos_final'
             ])->default('tidak_lolos_slhd');
             
             $table->timestamps();

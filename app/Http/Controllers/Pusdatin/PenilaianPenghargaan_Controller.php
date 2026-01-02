@@ -5,28 +5,31 @@ namespace App\Http\Controllers\Pusdatin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\LogService;
+use App\Services\PenilaianParsingService;
 use App\Models\Pusdatin\PenilaianPenghargaan;
 use Illuminate\Support\Facades\Storage;
-use App\Jobs\ParsePenilaianPenghargaanJob;
 use App\Models\Pusdatin\PenilaianSLHD;
-use App\Jobs\GenerateTemplatePenilaianPenghargaan;
 use App\Services\ValidasiService;
 
 class PenilaianPenghargaan_Controller extends Controller
 {
     protected $logService;
     protected $validasiService;
+    protected $tahapanService;
+    protected $parsingService;
     private const STORAGE_DISK = 'pusdatin';
 
-
-    protected $tahapanService;
-
-    public function __construct(LogService $logService, ValidasiService $validasiService, \App\Services\TahapanPenilaianService $tahapanService)
-    {
+    public function __construct(
+        LogService $logService, 
+        ValidasiService $validasiService, 
+        \App\Services\TahapanPenilaianService $tahapanService,
+        PenilaianParsingService $parsingService
+    ) {
         $this->logService = $logService;        
         $this->validasiService = $validasiService;
         $this->tahapanService = $tahapanService;
-}
+        $this->parsingService = $parsingService;
+    }
     public function downloadTemplate(Request $request, $year){
         $penilaianSLHD= PenilaianSLHD::where(['year'=>$year,'status'=>'finalized'])->first();
         if(!$penilaianSLHD){
@@ -39,12 +42,8 @@ class PenilaianPenghargaan_Controller extends Controller
         $disk = Storage::disk('templates');
         
         if (!$disk->exists($templatePath)) {
-            dispatch(new GenerateTemplatePenilaianPenghargaan($penilaianSLHD))->onQueue('generate_templates_penghargaan');
-            return response()->json([
-                'message' => 'Template penilaian Penghargaan belum tersedia.Sedang diproses',
-                'path' => $templatePath
-            ], 404);
-
+            // Generate langsung (synchronous)
+            $this->parsingService->generateTemplatePenghargaan($penilaianSLHD);
         }
 
         
@@ -116,10 +115,11 @@ class PenilaianPenghargaan_Controller extends Controller
             'status' =>'success'
         ]);
 
-        dispatch(new ParsePenilaianPenghargaanJob($penilaian))->onQueue('penilaian_penghargaan_parsing');
+        // Parse langsung (synchronous)
+        $this->parsingService->parsePenilaianPenghargaan($penilaian);
 
         return response()->json([
-            'message' =>  'Penilaian Penghargaan berhasil diunggah.',
+            'message' =>  'Penilaian Penghargaan berhasil diunggah dan diparsing.',
             'data' => $penilaian
         ], 200);
     }

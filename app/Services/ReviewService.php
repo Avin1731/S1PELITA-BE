@@ -18,6 +18,7 @@ class ReviewService
     protected $map = [
         'ringkasanEksekutif' => 'ringkasan_eksekutif',
         'laporanUtama' => 'laporan_utama',
+        'lampiran' => 'lampiran',
         'iklh' => 'iklh',
     ];
     public function __construct(LogService $logService)

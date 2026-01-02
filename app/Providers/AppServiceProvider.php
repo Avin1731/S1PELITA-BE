@@ -20,25 +20,27 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Register event listeners
-        Event::listen(
-            \App\Events\PenilaianSLHDUpdated::class,
-            \App\Listeners\HandleUnfinalizedPenilaianSLHD::class
-        );
+        // Event listeners untuk unfinalize tidak diperlukan lagi
+        // Logic sudah dipindah ke TahapanPenilaianService->updateSetelahUnfinalize()
+        
+        // Event::listen(
+        //     \App\Events\PenilaianSLHDUpdated::class,
+        //     \App\Listeners\HandleUnfinalizedPenilaianSLHD::class
+        // );
 
-        Event::listen(
-            \App\Events\PenilaianPenghargaanUpdated::class,
-            \App\Listeners\HandleUnfinalizedPenilaianPenghargaan::class
-        );
+        // Event::listen(
+        //     \App\Events\PenilaianPenghargaanUpdated::class,
+        //     \App\Listeners\HandleUnfinalizedPenilaianPenghargaan::class
+        // );
 
-        Event::listen(
-            \App\Events\Validasi1Updated::class,
-            \App\Listeners\HandleUnfinalizedValidasi1::class
-        );
+        // Event::listen(
+        //     \App\Events\Validasi1Updated::class,
+        //     \App\Listeners\HandleUnfinalizedValidasi1::class
+        // );
 
-        Event::listen(
-            \App\Events\Validasi2Updated::class,
-            \App\Listeners\HandleUnfinalizedValidasi2::class
-        );
+        // Event::listen(
+        //     \App\Events\Validasi2Updated::class,
+        //     \App\Listeners\HandleUnfinalizedValidasi2::class
+        // );
     }
 }

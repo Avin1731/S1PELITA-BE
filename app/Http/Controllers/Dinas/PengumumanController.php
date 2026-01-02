@@ -130,6 +130,8 @@ class PengumumanController extends Controller
         
         // Cek status tahapan penilaian
         $tahapan = TahapanPenilaianStatus::where('year', $year)->first();
+       
+
         
         if (!$tahapan) {
             return response()->json([
@@ -142,6 +144,7 @@ class PengumumanController extends Controller
             'year' => $year,
             'id_dinas' => $dinas->id
         ])->first();
+       
         
         // if (!$rekap) {
         //     return response()->json([
@@ -185,7 +188,7 @@ class PengumumanController extends Controller
                 'keterangan' => $tahapan->keterangan
             ]);
         }
-        
+    
         // Tahap sudah selesai ATAU tahap aktif dengan pengumuman terbuka
         // Generate dan return hasil
         $hasil = $this->generateHasilByTahap($tahapDiminta, $rekap);
@@ -202,6 +205,7 @@ class PengumumanController extends Controller
      */
     private function generateHasilByTahap($tahap, $rekap)
     {
+        
         switch ($tahap) {
             case 'submission':
                 return [
@@ -211,6 +215,7 @@ class PengumumanController extends Controller
                 ];
                 
             case 'penilaian_slhd':
+                
                 return [
                     'tahap_diumumkan' => 'Penilaian SLHD',
                     'nilai_slhd' => $rekap->nilai_slhd,

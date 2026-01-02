@@ -24,7 +24,7 @@ class DashboardController extends Controller
         // Get submission untuk tahun ini
         $submission = Submission::where('id_dinas', $dinas->id)
             ->where('tahun', $year)
-            ->with(['ringkasanEksekutif', 'laporanUtama', 'tabelUtama', 'iklh'])
+            ->with(['ringkasanEksekutif', 'laporanUtama','lampiran', 'tabelUtama', 'iklh'])
             ->first();
 
         // Get deadline submission
@@ -108,11 +108,12 @@ class DashboardController extends Controller
         if (!$submission) {
             return [
                 'total_dokumen' => 0,
-                'total_required' => 4,
+                'total_required' => 84,
                 'percentage' => 0,
                 'dokumen' => [
                     ['nama' => 'Ringkasan Eksekutif', 'status' => 'belum', 'uploaded' => false],
                     ['nama' => 'Laporan Utama', 'status' => 'belum', 'uploaded' => false],
+                    ['nama' => 'Lampiran', 'status' => 'belum', 'uploaded' => false],
                     ['nama' => 'Tabel Utama', 'status' => 'belum', 'uploaded' => false, 'count' => 0],
                     ['nama' => 'IKLH', 'status' => 'belum', 'uploaded' => false],
                 ]
@@ -141,19 +142,30 @@ class DashboardController extends Controller
             'uploaded' => $laporanExists,
             'updated_at' => $laporanExists ? $submission->laporanUtama->updated_at->format('d-m-Y') : null,
         ];
+        // Lampiran
+        $lampiranExists = $submission->lampiran !== null;
+        if ($lampiranExists) $uploaded++;
+        $dokumen[] = [
+            'nama' => 'Lampiran',
+            'status' => $lampiranExists ? $submission->lampiran->status : 'belum',
+            'uploaded' => $lampiranExists,
+            'updated_at' => $lampiranExists ? $submission->lampiran->updated_at->format('d-m-Y') : null,
+        ];
 
         // Tabel Utama (show upload progress out of 80)
         $tabelCount = $submission->tabelUtama->count();
-        $tabelFinalized = $submission->tabelUtama->where('status', 'finalized')->count();
+        // $tabelFinalized = $submission->tabelUtama->where('status', 'finalized')->count();
         $totalRequired = 80; // Total tabel yang harus diupload
-        if ($tabelCount > 0) $uploaded++;
+        // if ($tabelCount > 0) $uploaded++;
+        $uploaded += $tabelCount;
+
         $dokumen[] = [
             'nama' => 'Tabel Utama',
-            'status' => $tabelCount >= $totalRequired ? ($tabelFinalized === $tabelCount ? 'finalized' : 'draft') : 'belum',
+            'status' => $tabelCount >= $totalRequired ? ( $tabelCount == $totalRequired ? 'finalized' : 'draft') : 'belum',
             'uploaded' => $tabelCount > 0,
             'count' => $tabelCount,
             'total_required' => $totalRequired,
-            'finalized_count' => $tabelFinalized,
+            // 'finalized_count' => $tabelFinalized,
         ];
 
         // IKLH
@@ -168,8 +180,8 @@ class DashboardController extends Controller
 
         return [
             'total_dokumen' => $uploaded,
-            'total_required' => 4,
-            'percentage' => round(($uploaded / 4) * 100),
+            'total_required' => 84,
+            'percentage' => round(($uploaded / 84) * 100),
             'submission_finalized' => $submission->is_finalized ?? false,
             'dokumen' => $dokumen,
         ];
