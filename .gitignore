@@ -15,7 +15,11 @@
 /node_modules
 /public/build
 /public/hot
-/public/storage
+# /public/storage
+/storage/framework
+/storage/logs
+/storage/app/dlh
+/storage/app/pusdatin
 /storage/*.key
 /storage/pail
 /vendor
