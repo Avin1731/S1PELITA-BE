@@ -20,6 +20,8 @@ class RekapPenilaianService
             ->get();
         
         foreach ($parsed as $row) {
+            $lolos = $row->Total_Skor >= 60; // Sesuaikan threshold
+            
             RekapPenilaian::updateOrCreate(
                 [
                     'year' => $slhd->year,
@@ -28,8 +30,9 @@ class RekapPenilaianService
                 [
                     'nama_dinas' => $row->nama_dinas,
                     'nilai_slhd' => $row->Total_Skor,
-                    'lolos_slhd' => $row->Total_Skor >= 60, // Sesuaikan threshold
-                    'status_akhir' => $row->Total_Skor >= 60 ? 'tidak_masuk_penghargaan' : 'tidak_lolos_slhd',
+                    'lolos_slhd' => $lolos,
+                    // Lolos SLHD → menunggu penghargaan, Tidak lolos → tidak_lolos_slhd
+                    'status_akhir' => $lolos ? 'menunggu_penilaian_penghargaan' : 'tidak_lolos_slhd',
                 ]
             );
         }
@@ -54,10 +57,17 @@ class RekapPenilaianService
                     'nama_dinas' => $row->nama_dinas,
                     'nilai_penghargaan' => $row->Total_Skor,
                     'masuk_penghargaan' => true,
-                    'status_akhir' => 'tidak_lolos_validasi1',
+                    // Masuk penghargaan → menunggu validasi1
+                    'status_akhir' => 'menunggu_validasi1',
                 ]
             );
         }
+        
+        // Update yang tidak masuk penghargaan (lolos SLHD tapi tidak masuk penghargaan)
+        RekapPenilaian::where('year', $penghargaan->year)
+            ->where('lolos_slhd', true)
+            ->where('masuk_penghargaan', false)
+            ->update(['status_akhir' => 'tidak_lolos_penghargaan']);
     }
     
     /**
@@ -80,7 +90,8 @@ class RekapPenilaianService
                     'nilai_iklh' => $row->Nilai_IKLH,
                     'total_skor_validasi1' => $row->Total_Skor,
                     'lolos_validasi1' => $lolos,
-                    'status_akhir' => $lolos ? 'tidak_lolos_validasi2' : 'tidak_lolos_validasi1',
+                    // Lolos validasi1 → menunggu validasi2, Tidak lolos → tidak_lolos_validasi1
+                    'status_akhir' => $lolos ? 'menunggu_validasi2' : 'tidak_lolos_validasi1',
                 ]
             );
         }
@@ -110,7 +121,8 @@ class RekapPenilaianService
                     'kriteria_kasus_hukum' => $row->Kriteria_Kasus_Hukum,
                     'lolos_validasi2' => true,
                     'peringkat' => $peringkat++,
-                    'status_akhir' => 'lolos_final',
+                    // Lolos validasi2 → menunggu wawancara
+                    'status_akhir' => 'menunggu_wawancara',
                 ]
             );
         }
@@ -144,7 +156,7 @@ class RekapPenilaianService
     public function getPeringkatAkhir($year)
     {
         return RekapPenilaian::where('year', $year)
-            ->where('status_akhir', 'lolos_final')
+            ->where('status_akhir', 'menunggu_wawancara')
             ->orderBy('peringkat')
             ->with('dinas')
             ->get();
@@ -169,16 +181,16 @@ class RekapPenilaianService
                 'id_dinas' => $wawancara->id_dinas
             ])->first();
             
-            if (!$rekap) {
-                \Log::warning("Rekap tidak ditemukan untuk id_dinas: {$wawancara->id_dinas}, year: {$year}");
-                continue;
-            }
+            // if (!$rekap) {
+            //     \Log::warning("Rekap tidak ditemukan untuk id_dinas: {$wawancara->id_dinas}, year: {$year}");
+            //     continue;
+            // }
             
-            // Pastikan nilai wawancara ada
-            if (is_null($wawancara->nilai_wawancara)) {
-                \Log::warning("Nilai wawancara null untuk id_dinas: {$wawancara->id_dinas}, year: {$year}");
-                continue;
-            }
+            // // Pastikan nilai wawancara ada
+            // if (is_null($wawancara->nilai_wawancara)) {
+            //     \Log::warning("Nilai wawancara null untuk id_dinas: {$wawancara->id_dinas}, year: {$year}");
+            //     continue;
+            // }
             
             // Hitung total skor final: 90% dari nilai SLHD + 10% Wawancara
             $nilaiSLHD = $rekap->nilai_slhd ?? 0;
@@ -187,10 +199,11 @@ class RekapPenilaianService
             $rekap->update([
                 'nilai_wawancara' => $wawancara->nilai_wawancara,
                 'lolos_wawancara' => true,
-                'total_skor_final' => $total_skor_final
+                'total_skor_final' => $total_skor_final,
+                'status_akhir' => "selesai",
             ]);
             
-            \Log::info("Updated rekap for dinas {$wawancara->id_dinas}: nilai_slhd={$nilaiSLHD}, nilai_wawancara={$wawancara->nilai_wawancara}, skor_final={$total_skor_final}");
+            // \Log::info("Updated rekap for dinas {$wawancara->id_dinas}: nilai_slhd={$nilaiSLHD}, nilai_wawancara={$wawancara->nilai_wawancara}, skor_final={$total_skor_final}");
         }
         
         // Hitung peringkat final berdasarkan skor_final (descending)
@@ -204,7 +217,7 @@ class RekapPenilaianService
             $rekap->update(['peringkat_final' => $peringkat++]);
         }
         
-        \Log::info("Finalized wawancara for year {$year}, updated {$wawancaraData->count()} records");
+        // \Log::info("Finalized wawancara for year {$year}, updated {$wawancaraData->count()} records");
     }
     
     /**
@@ -212,13 +225,16 @@ class RekapPenilaianService
      */
     public function resetFinalScores($year)
     {
-        RekapPenilaian::where('year', $year)->update([
-            'nilai_wawancara' => null,
-            'lolos_wawancara' => false,
-            'total_skor_final' => null,
-            'peringkat_final' => null,
-            'status_akhir' => null
-        ]);
+        // Reset wawancara scores, kembalikan status ke lolos_validasi2
+        RekapPenilaian::where('year', $year)
+            ->where('lolos_validasi2', true)
+            ->update([
+                'nilai_wawancara' => null,
+                'lolos_wawancara' => false,
+                'total_skor_final' => null,
+                'peringkat_final' => null,
+                'status_akhir' => 'menunggu_wawancara',
+            ]);
     }
     
     /**

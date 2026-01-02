@@ -7,6 +7,7 @@ use App\Models\Files\RingkasanEksekutif;
 use App\Models\Files\LaporanUtama;
 use App\Models\Files\TabelUtama;
 use App\Models\Files\Iklh;
+use App\Models\Files\Lampiran;
 
 class Submission extends Model
 {
@@ -40,5 +41,10 @@ class Submission extends Model
     public function iklh()
     {
         return $this->hasOne(Iklh::class);
+    }
+    
+    public function lampiran()
+    {
+        return $this->hasOne(Lampiran::class);
     }
 }

@@ -20,7 +20,7 @@ return new class extends Migration
             $table->enum('activity_type', ['approve','reject','upload','finalize','reopen']);
             $table->foreignId('actor_id')->constrained('users')->onUpdate('cascade')->onDelete('cascade');
 
-            $table->enum('document_type', ['ringkasan_eksekutif', 'laporan_utama', 'tabel_utama', 'iklh'])->nullable();
+            $table->enum('document_type', ['ringkasan_eksekutif', 'laporan_utama', 'tabel_utama', 'lampiran', 'iklh'])->nullable();
 
             $table->enum('status', ['approved', 'rejected','success','failed'])->nullable();
             $table->text('catatan')->nullable();

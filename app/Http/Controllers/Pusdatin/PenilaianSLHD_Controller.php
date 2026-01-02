@@ -3,19 +3,16 @@
 namespace App\Http\Controllers\Pusdatin;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\GenerateTemplatePenilaianPenghargaan;
 use App\Models\Pusdatin\PenilaianSLHD;
 use App\Services\LogService;
+use App\Services\PenilaianParsingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Phiki\Grammar\Injections\Path;
-use App\Jobs\ParsePenilaianSLHDJob;
 use App\Models\Pusdatin\Parsed\PenilaianSLHD_Parsed;
 use App\Services\ExcelService;
 use App\services\SLHDService;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use Illuminate\Support\Facades\Log;
 use App\Models\Submission;
 use App\Models\Dinas;
@@ -29,6 +26,7 @@ class PenilaianSLHD_Controller extends Controller
     protected $excelService;
     protected $slhdService;
     protected $tahapanService;
+    protected $parsingService;
 
     public function deleteExistingPath($filePath){
         $disk = Storage::disk(self::STORAGE_DISK);
@@ -38,14 +36,18 @@ class PenilaianSLHD_Controller extends Controller
         }
     }
      
-    public function __construct(LogService $logService, ExcelService $excelService, SLHDService $slhdService, \App\Services\TahapanPenilaianService $tahapanService)
-    {
+    public function __construct(
+        LogService $logService, 
+        ExcelService $excelService, 
+        SLHDService $slhdService, 
+        \App\Services\TahapanPenilaianService $tahapanService,
+        PenilaianParsingService $parsingService
+    ) {
         $this->logService = $logService;
         $this->excelService = $excelService;
         $this->slhdService = $slhdService;
         $this->tahapanService = $tahapanService;
-
-        
+        $this->parsingService = $parsingService;
     }
     public function tes(Request $request){
         return response()->json(['message' => 'Test successful','id'=>$request->user()->id]);
@@ -104,24 +106,29 @@ class PenilaianSLHD_Controller extends Controller
             // Buku I = Laporan Utama, Buku II = Ringkasan Eksekutif, Tabel = Tabel Utama
             $buku1Finalized = false;
             $buku2Finalized = false;
+            $buku3Finalized = false;
             $tabelFinalized = false;
             
             $buku1Status = null;
             $buku2Status = null;
+            $buku3Status = null;
             $tabelStatus = null;
             
             if ($submission) {
                 $buku1Finalized = $submission->laporanUtama?->status === 'finalized' || $submission->laporanUtama?->status === 'approved';
                 $buku2Finalized = $submission->ringkasanEksekutif?->status === 'finalized' || $submission->ringkasanEksekutif?->status === 'approved';
+                $buku3Finalized = $submission->lampiran?->status === 'finalized' || $submission->lampiran?->status === 'approved';
                 $tabelFinalized = $submission->tabelUtama->count() > 0 && $submission->tabelUtama->every(fn($t) => $t->status === 'finalized' || $t->status === 'approved');
                 
                 $buku1Status = $submission->laporanUtama?->status;
                 $buku2Status = $submission->ringkasanEksekutif?->status;
+                $buku3Status = $submission->lampiran?->status;
                 // Untuk tabel, ambil status yang paling umum atau yang pertama
-                $tabelStatus = $submission->tabelUtama->count() > 0 
-                    ? ($submission->tabelUtama->every(fn($t) => $t->status === 'approved') ? 'approved' 
-                        : ($submission->tabelUtama->every(fn($t) => $t->status === 'finalized') ? 'finalized' : 'draft'))
-                    : null;
+                $count=$submission->tabelUtama->count();
+                $tabelStatus = $count === 0 ? null 
+                : ($count === 80 ? 'finalized' : 'draft');
+                    
+                    
             }
             
             return [
@@ -136,6 +143,7 @@ class PenilaianSLHD_Controller extends Controller
                 'all_finalized' => $buku1Finalized && $buku2Finalized && $tabelFinalized,
                 'buku1_status' => $buku1Status,
                 'buku2_status' => $buku2Status,
+                'buku3_status' => $buku3Status,
                 'tabel_status' => $tabelStatus,
             ];
         });
@@ -211,9 +219,11 @@ class PenilaianSLHD_Controller extends Controller
             'status' =>'success'
         ]);
 
-        dispatch(new ParsePenilaianSLHDJob($penilaian))->onQueue('penilaian_slhd_parsing');
+        // Parse langsung (synchronous)
+        $this->parsingService->parsePenilaianSLHD($penilaian);
+        
         return response()->json([
-            'message' =>  'Penilaian SLHD berhasil diunggah.',
+            'message' =>  'Penilaian SLHD berhasil diunggah dan diparsing.',
             'data' => $penilaian
         ], 200);
 }
@@ -277,10 +287,13 @@ class PenilaianSLHD_Controller extends Controller
         // Update tahapan penilaian status
         $this->tahapanService->updateSetelahFinalize('penilaian_slhd', $penilaianSLHD->year);
         
-        dispatch(new GenerateTemplatePenilaianPenghargaan($penilaianSLHD))->onQueue('generate_templates_penghargaan');
+        // Generate template penghargaan langsung (synchronous)
+        $templatePath = $this->parsingService->generateTemplatePenghargaan($penilaianSLHD);
+        
         return response()->json([
             'message' => 'Penilaian SLHD untuk tahun '.$penilaianSLHD->year.' berhasil difinalisasi.',
-            'data' => $penilaianSLHD
+            'data' => $penilaianSLHD,
+            'template_path' => $templatePath
         ],200);
         
     }

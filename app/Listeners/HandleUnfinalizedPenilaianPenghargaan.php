@@ -5,19 +5,20 @@ namespace App\Listeners;
 use App\Events\PenilaianPenghargaanUpdated;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
-use App\Models\Pusdatin\RekapPenilaian;
 use App\Models\Pusdatin\Validasi1;
-use App\Models\Pusdatin\Validasi2;
 use App\Models\Pusdatin\Wawancara;
+use App\Services\TahapanPenilaianService;
 
 class HandleUnfinalizedPenilaianPenghargaan
 {
+    protected $tahapanService;
+
     /**
      * Create the event listener.
      */
-    public function __construct()
+    public function __construct(TahapanPenilaianService $tahapanService)
     {
-        //
+        $this->tahapanService = $tahapanService;
     }
 
     /**
@@ -35,23 +36,8 @@ class HandleUnfinalizedPenilaianPenghargaan
             // Hapus Wawancara untuk year terkait
             Wawancara::where('year', $penghargaan->year)->delete();
 
-            // Reset rekap penilaian - hapus data setelah penghargaan
-            RekapPenilaian::where('year', $penghargaan->year)->update([
-                'nilai_penghargaan' => null,
-                'masuk_penghargaan' => false,
-                'nilai_iklh' => null,
-                'total_skor_validasi1' => null,
-                'lolos_validasi1' => false,
-                'lolos_validasi2' => false,
-                'kriteria_wtp' => null,
-                'kriteria_kasus_hukum' => null,
-                'peringkat' => null,
-                'nilai_wawancara' => null,
-                'lolos_wawancara' => false,
-                'total_skor_final' => null,
-                'peringkat_final' => null,
-                'status_akhir' => null
-            ]);
+            // Update tahapan penilaian status (sudah include reset rekap di dalamnya)
+            // $this->tahapanService->updateSetelahUnfinalize('penilaian_penghargaan', $penghargaan->year);
         }
     }
 }

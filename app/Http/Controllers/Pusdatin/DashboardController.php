@@ -17,62 +17,231 @@ class DashboardController extends Controller
      */
     public function getStats(Request $request)
     {
+        
         $year = $request->get('year', date('Y'));
 
-        // 1. Total dinas terdaftar
-        $totalDlh = Dinas::where('status','terdaftar')->count();
+        // ===== 4 CARD ATAS =====
+        
+        // 1. Total DLH terdaftar
+        $totalDlh = Dinas::count();
 
-        // 2. SLHD Buku 1 - Upload dan Approved
-        $buku1Upload = Submission::where('tahun', $year)
-            ->whereHas('ringkasanEksekutif')
+        // 2. Total Pengajuan Buku 1 (Ringkasan Eksekutif yang difinalisasi)
+        $totalPengajuanBuku1 = Submission::where('tahun', $year)
+            ->whereHas('ringkasanEksekutif', fn($q) => $q->whereIn('status', ['finalized', 'approved']))
+            ->count();
+
+        // 3. Total Pengajuan Buku 2 (Laporan Utama yang difinalisasi)
+        $totalPengajuanBuku2 = Submission::where('tahun', $year)
+            ->whereHas('laporanUtama', fn($q) => $q->whereIn('status', ['finalized', 'approved']))
+            ->count();
+        
+        // 3b. Total Pengajuan Buku 3 (Lampiran yang difinalisasi)
+        $totalPengajuanBuku3 = Submission::where('tahun', $year)
+            ->whereHas('lampiran', fn($q) => $q->whereIn('status', ['finalized', 'approved']))
+            ->count();
+
+        // 4. Total Pengajuan IKLH (yang difinalisasi)
+        $totalPengajuanIklh = Submission::where('tahun', $year)
+            ->whereHas('iklh', fn($q) => $q->whereIn('status', ['finalized', 'approved']))
+            ->count();
+
+        // ===== STATUS TAHAP AKTIF =====
+        $tahapan = TahapanPenilaianStatus::where('year', $year)->first();
+        $tahapAktif = $tahapan?->tahap_aktif ?? 'submission';
+        $tahapLabel = $this->getTahapLabel($tahapAktif);
+
+        // ===== 8 CARD PROGRESS (HIJAU) =====
+        
+        // Card 1-3: Dokumen Stats (Approved vs Finalized)
+        $buku1Finalized = Submission::where('tahun', $year)
+            ->whereHas('ringkasanEksekutif', fn($q) => $q->whereIn('status', ['finalized', 'approved']))
             ->count();
         $buku1Approved = Submission::where('tahun', $year)
-            ->whereHas('ringkasanEksekutif', fn($sq) => $sq->where('status', 'approved'))
+            ->whereHas('ringkasanEksekutif', fn($q) => $q->where('status', 'approved'))
             ->count();
 
-        // 3. SLHD Buku 2 - Upload dan Approved
-        $buku2Upload = Submission::where('tahun', $year)
-            ->whereHas('laporanUtama')
+        $buku2Finalized = Submission::where('tahun', $year)
+            ->whereHas('laporanUtama', fn($q) => $q->whereIn('status', ['finalized', 'approved']))
             ->count();
         $buku2Approved = Submission::where('tahun', $year)
-            ->whereHas('laporanUtama', fn($sq) => $sq->where('status', 'approved'))
+            ->whereHas('laporanUtama', fn($q) => $q->where('status', 'approved'))
+            ->count();
+        
+        $buku3Finalized = Submission::where('tahun', $year)
+            ->whereHas('lampiran', fn($q) => $q->whereIn('status', ['finalized', 'approved']))
+            ->count();
+        $buku3Approved = Submission::where('tahun', $year)
+            ->whereHas('lampiran', fn($q) => $q->where('status', 'approved'))
             ->count();
 
-        // 4. IKLH - Upload dan Approved
-        $iklhUpload = Submission::where('tahun', $year)
-            ->whereHas('iklh')
+        $iklhFinalized = Submission::where('tahun', $year)
+            ->whereHas('iklh', fn($q) => $q->whereIn('status', ['finalized', 'approved']))
             ->count();
         $iklhApproved = Submission::where('tahun', $year)
-            ->whereHas('iklh', fn($sq) => $sq->where('status', 'approved'))
+            ->whereHas('iklh', fn($q) => $q->where('status', 'approved'))
             ->count();
 
-        // 5. Rata-rata Nilai SLHD (dari penilaian yang finalized)
-        $slhd = \App\Models\Pusdatin\PenilaianSLHD::where(['year' => $year, 'status' => 'finalized'])->first();
-        $avgNilaiSLHD = null;
-        $statusPenilaian = 'Hasil Penilaian belum tersedia';
+        // ===== STATS DARI REKAP PENILAIAN =====
+        $rekap = \App\Models\Pusdatin\RekapPenilaian::where('year', $year);
+        $rekapTotal = (clone $rekap)->count();
         
-        if ($slhd && $slhd->is_finalized) {
-            // Hitung rata-rata dari parsed data
+        // Card 4: SLHD Stats - dari RekapPenilaian
+        $slhd = \App\Models\Pusdatin\PenilaianSLHD::where(['year' => $year, 'status' => 'finalized'])->first();
+        $slhdTotal = $rekapTotal;
+        $slhdLolos = \App\Models\Pusdatin\RekapPenilaian::where('year', $year)
+            ->where('lolos_slhd', true)
+            ->count();
+
+        // Card 5: Penghargaan Stats - dari RekapPenilaian
+        $penghargaan = \App\Models\Pusdatin\PenilaianPenghargaan::where(['year' => $year, 'status' => 'finalized'])->first();
+        $penghargaanTotal = $slhdLolos; // Yang masuk penghargaan = yang lolos SLHD
+        $penghargaanLolos = \App\Models\Pusdatin\RekapPenilaian::where('year', $year)
+            ->where('masuk_penghargaan', true)
+            ->count();
+
+        // Card 6: Validasi 1 Stats - dari RekapPenilaian
+        $validasi1 = \App\Models\Pusdatin\Validasi1::where('year', $year)->first();
+        $validasi1Total = $penghargaanLolos; // Yang masuk validasi 1 = yang lolos penghargaan
+        $validasi1Lolos = \App\Models\Pusdatin\RekapPenilaian::where('year', $year)
+            ->where('lolos_validasi1', true)
+            ->count();
+
+        // Card 7: Validasi 2 Stats - dari RekapPenilaian
+        $validasi2 = \App\Models\Pusdatin\Validasi2::where('year', $year)->first();
+        $validasi2Total = $validasi1Lolos; // Yang masuk validasi 2 = yang lolos validasi 1
+        $validasi2Lolos = \App\Models\Pusdatin\RekapPenilaian::where('year', $year)
+            ->where('lolos_validasi2', true)
+            ->count();
+
+        // Card 8: Wawancara Stats
+        $wawancaraTotal = \App\Models\Pusdatin\Wawancara::where('year', $year)->count();
+        $wawancaraDinilai = \App\Models\Pusdatin\Wawancara::where('year', $year)
+            ->whereNotNull('nilai_wawancara')
+            ->count();
+
+        // Rata-rata Nilai SLHD (untuk card tambahan jika perlu)
+        $avgNilaiSLHD = null;
+        if ($slhd) {
             $avgNilaiSLHD = \App\Models\Pusdatin\Parsed\PenilaianSLHD_Parsed::where('penilaian_slhd_id', $slhd->id)
-            ->avg('total_skor');
-            
-            if ($avgNilaiSLHD !== null) {
-                $statusPenilaian = number_format($avgNilaiSLHD, 2);
-            } else {
-                $statusPenilaian = 'Data tidak tersedia';
-            }
+                ->avg('total_skor');
         }
 
         return response()->json([
+            // 4 Card Atas
+            'summary' => [
+                'total_dlh' => $totalDlh,
+                'total_pengajuan_buku1' => $totalPengajuanBuku1,
+                'total_pengajuan_buku2' => $totalPengajuanBuku2,
+                'total_pengajuan_buku3' => $totalPengajuanBuku3,
+                'total_pengajuan_iklh' => $totalPengajuanIklh,
+                'rata_rata_nilai' => $avgNilaiSLHD ? number_format($avgNilaiSLHD, 2) : null,
+            ],
+            
+            // Status Tahap Aktif
+            'tahap' => [
+                'aktif' => $tahapAktif,
+                'label' => $tahapLabel,
+                'pengumuman_terbuka' => $tahapan?->pengumuman_terbuka ?? false,
+                'keterangan' => $tahapan?->keterangan ?? 'Menunggu proses dimulai',
+            ],
+            
+            // Card Progress
+            'progress' => [
+                // Card 1-4: Dokumen
+                'buku1' => [
+                    'label' => 'Ringkasan Eksekutif (Buku 1)',
+                    'approved' => $buku1Approved,
+                    'finalized' => $buku1Finalized,
+                    'percentage' => $buku1Finalized > 0 ? round(($buku1Approved / $buku1Finalized) * 100) : 0,
+                    'is_finalized' => $buku1Finalized > 0,
+                ],
+                'buku2' => [
+                    'label' => 'Laporan Utama (Buku 2)',
+                    'approved' => $buku2Approved,
+                    'finalized' => $buku2Finalized,
+                    'percentage' => $buku2Finalized > 0 ? round(($buku2Approved / $buku2Finalized) * 100) : 0,
+                    'is_finalized' => $buku2Finalized > 0,
+                ],
+                'buku3' => [
+                    'label' => 'Lampiran (Buku 3)',
+                    'approved' => $buku3Approved,
+                    'finalized' => $buku3Finalized,
+                    'percentage' => $buku3Finalized > 0 ? round(($buku3Approved / $buku3Finalized) * 100) : 0,
+                    'is_finalized' => $buku3Finalized > 0,
+                ],
+                'iklh' => [
+                    'label' => 'IKLH',
+                    'approved' => $iklhApproved,
+                    'finalized' => $iklhFinalized,
+                    'percentage' => $iklhFinalized > 0 ? round(($iklhApproved / $iklhFinalized) * 100) : 0,
+                    'is_finalized' => $iklhFinalized > 0,
+                ],
+                // Card 5-9: Penilaian
+                'slhd' => [
+                    'label' => 'Tahap 1 (SLHD)',
+                    'lolos' => $slhdLolos,
+                    'total' => $slhdTotal,
+                    'percentage' => $slhdTotal > 0 ? round(($slhdLolos / $slhdTotal) * 100) : 0,
+                    'is_finalized' => $slhd?->is_finalized ?? false,
+                ],
+                'penghargaan' => [
+                    'label' => 'Tahap 2 (Penghargaan)',
+                    'lolos' => $penghargaanLolos,
+                    'total' => $penghargaanTotal,
+                    'percentage' => $penghargaanTotal > 0 ? round(($penghargaanLolos / $penghargaanTotal) * 100) : 0,
+                    'is_finalized' => $penghargaan?->is_finalized ?? false,
+                ],
+                'validasi1' => [
+                    'label' => 'Tahap 3 (Validasi 1)',
+                    'lolos' => $validasi1Lolos,
+                    'total' => $validasi1Total,
+                    'percentage' => $validasi1Total > 0 ? round(($validasi1Lolos / $validasi1Total) * 100) : 0,
+                    'is_finalized' => $validasi1?->is_finalized ?? false,
+                ],
+                'validasi2' => [
+                    'label' => 'Tahap 4 (Validasi 2)',
+                    'lolos' => $validasi2Lolos,
+                    'total' => $validasi2Total,
+                    'percentage' => $validasi2Total > 0 ? round(($validasi2Lolos / $validasi2Total) * 100) : 0,
+                    'is_finalized' => $validasi2?->is_finalized ?? false,
+                ],
+                'wawancara' => [
+                    'label' => 'Tahap 5 (Wawancara)',
+                    'dinilai' => $wawancaraDinilai,
+                    'total' => $wawancaraTotal,
+                    'percentage' => $wawancaraTotal > 0 ? round(($wawancaraDinilai / $wawancaraTotal) * 100) : 0,
+                    'is_finalized' => $tahapan?->tahap_aktif === 'selesai',
+                ],
+            ],
+            
+            // Legacy (backward compatibility)
             'total_dlh' => $totalDlh,
-            'buku1_upload' => $buku1Upload,
+            'buku1_upload' => $buku1Finalized,
             'buku1_approved' => $buku1Approved,
-            'buku2_upload' => $buku2Upload,
+            'buku2_upload' => $buku2Finalized,
             'buku2_approved' => $buku2Approved,
-            'iklh_upload' => $iklhUpload,
+            'iklh_upload' => $iklhFinalized,
             'iklh_approved' => $iklhApproved,
-            'avg_nilai_slhd' => $statusPenilaian,
+            'avg_nilai_slhd' => $avgNilaiSLHD ? number_format($avgNilaiSLHD, 2) : 'Belum tersedia',
         ]);
+    }
+    
+    /**
+     * Get label untuk tahap
+     */
+    private function getTahapLabel($tahap)
+    {
+        $labels = [
+            'submission' => 'Penerimaan Data',
+            'penilaian_slhd' => 'Penilaian SLHD',
+            'penilaian_penghargaan' => 'Penilaian Penghargaan',
+            'validasi_1' => 'Validasi Tahap 1',
+            'validasi_2' => 'Validasi Tahap 2',
+            'wawancara' => 'Wawancara',
+            'selesai' => 'Penilaian Selesai',
+        ];
+        
+        return $labels[$tahap] ?? $tahap;
     }
 
     /**
@@ -255,21 +424,19 @@ class DashboardController extends Controller
                 : 0,
         ];
 
-        // Validasi 1 Stats
+        // Validasi 1 Stats - lolos dari RekapPenilaian
         $validasi1 = \App\Models\Pusdatin\Validasi1::where('year', $year)->first();
         $validasi1Stats = [
             'is_finalized' => $validasi1 ? $validasi1->is_finalized : false,
             'processed' => $validasi1 
                 ? \App\Models\Pusdatin\Parsed\Validasi1Parsed::where('validasi_1_id', $validasi1->id)->count()
                 : 0,
-            'lolos' => $validasi1 
-                ? \App\Models\Pusdatin\Parsed\Validasi1Parsed::where('validasi_1_id', $validasi1->id)
-                    ->where('status_result', 'lulus')
-                    ->count()
-                : 0,
+            'lolos' => \App\Models\Pusdatin\RekapPenilaian::where('year', $year)
+                ->where('lolos_validasi1', true)
+                ->count(),
         ];
 
-        // Validasi 2 Stats
+        // Validasi 2 Stats - lolos dari RekapPenilaian, checked dari parsed table
         $validasi2 = \App\Models\Pusdatin\Validasi2::where('year', $year)->first();
         $validasi2Stats = [
             'is_finalized' => $validasi2 ? $validasi2->is_finalized : false,
@@ -279,16 +446,15 @@ class DashboardController extends Controller
             'checked' => $validasi2
                 ? \App\Models\Pusdatin\Parsed\Validasi2Parsed::where('validasi_2_id', $validasi2->id)
                     ->where(function($q) {
-                        $q->where('Kriteria_WTP', true)
-                          ->orWhere('Kriteria_Kasus_Hukum', true);
+                        // Sudah dicentang jika salah satu kriteria true/false (bukan null)
+                        $q->whereNotNull('Kriteria_WTP')
+                          ->orWhereNotNull('Kriteria_Kasus_Hukum');
                     })
                     ->count()
                 : 0,
-            'lolos' => $validasi2
-                ? \App\Models\Pusdatin\Parsed\Validasi2Parsed::where('validasi_2_id', $validasi2->id)
-                    ->where('status_validasi', 'lolos')
-                    ->count()
-                : 0,
+            'lolos' => \App\Models\Pusdatin\RekapPenilaian::where('year', $year)
+                ->where('lolos_validasi2', true)
+                ->count(),
         ];
 
         // Wawancara Stats

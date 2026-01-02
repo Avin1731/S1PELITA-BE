@@ -26,6 +26,7 @@ class ReviewController extends Controller
             'dinas.region.parent:id,nama_region,type',
             'ringkasanEksekutif:id,submission_id,status',
             'laporanUtama:id,submission_id,status',
+            'lampiran:id,submission_id,status',
             'iklh:id,submission_id,status'
         ])
         ->withCount([
@@ -37,6 +38,7 @@ class ReviewController extends Controller
             // Submission muncul jika ada minimal 1 dokumen yang finalized/approved
             $q->whereHas('ringkasanEksekutif', fn($sq) => $sq->whereIn('status', ['finalized', 'approved']))
               ->orWhereHas('laporanUtama', fn($sq) => $sq->whereIn('status', ['finalized', 'approved']))
+              ->orWhereHas('lampiran', fn($sq) => $sq->whereIn('status', ['finalized', 'approved']))
               ->orWhereHas('iklh', fn($sq) => $sq->whereIn('status', ['finalized', 'approved']))
               ->orWhereHas('tabelUtama', fn($sq) => $sq->whereIn('status', ['finalized', 'approved']));
         });
@@ -121,6 +123,7 @@ class ReviewController extends Controller
                 // Status dokumen untuk monitoring
                 'buku_i' => $submission->ringkasanEksekutif ? $submission->ringkasanEksekutif->status : 'Belum Upload',
                 'buku_ii' => $submission->laporanUtama ? $submission->laporanUtama->status : 'Belum Upload',
+                'buku_iii' => $submission->lampiran ? $submission->lampiran->status : 'Belum Upload',
                 'tabel_utama' => $submission->tabel_utama_count === 0 ? 'Belum Upload' :
                                 ($submission->tabel_utama_finalized_count === $submission->tabel_utama_count ? 'finalized' : 'draft'),
                 'iklh' => $submission->iklh ? $submission->iklh->status : 'Belum Upload',
@@ -137,6 +140,7 @@ class ReviewController extends Controller
         $submission->load([
             'ringkasanEksekutif' => fn($q) => $q->whereIn('status', ['finalized', 'approved']),
             'laporanUtama' => fn($q) => $q->whereIn('status', ['finalized', 'approved']),
+            'lampiran' => fn($q) => $q->whereIn('status', ['finalized', 'approved']),
             'tabelUtama' => fn($q) => $q->whereIn('status', ['finalized', 'approved']),
             'iklh' => fn($q) => $q->whereIn('status', ['finalized', 'approved'])
         ]);
@@ -230,6 +234,50 @@ class ReviewController extends Controller
             ]
         ]);
     }
+    
+    /**
+     * Get detail Lampiran (Buku 3) untuk review
+     */
+    public function showLampiran(Submission $submission){
+        $lampiran = $submission->lampiran;
+        
+        if (!$lampiran) {
+            return response()->json([
+                'message' => 'Lampiran belum diupload untuk submission ini.'
+            ], 404);
+        }
+        
+        // Hanya dokumen yang finalized/approved bisa direview
+        if (!in_array($lampiran->status, ['finalized', 'approved'])) {
+            return response()->json([
+                'message' => 'Dokumen ini belum dapat direview karena masih dalam status draft.'
+            ], 403);
+        }
+        
+        // Metadata file lengkap
+        $filePath = $lampiran->path;
+        $fileExists = Storage::exists($filePath);
+        
+        return response()->json([
+            'submission_id' => $submission->id,
+            'dinas' => [
+                'nama' => $submission->dinas->nama_dinas ?? null,
+                'jenis' => $submission->dinas->region->type ?? null
+            ],
+            'tahun' => $submission->tahun,
+            'document' => [
+                'id' => $lampiran->id,
+                'jenis_dokumen' => 'SLHD Buku III (Lampiran)',
+                'status' => $lampiran->status,
+                'catatan_admin' => $lampiran->catatan_admin,
+                'nama_file' => basename($filePath),
+                'ukuran_file' => $fileExists ? round(Storage::size($filePath) / 1048576, 2) . ' MB' : null,
+                'format_file' => strtoupper(pathinfo($filePath, PATHINFO_EXTENSION)),
+                'tanggal_upload' => $lampiran->created_at,
+                'download_url' => $fileExists ? Storage::url($filePath) : null,
+            ]
+        ]);
+    }
 
     /**
      * Preview document inline (untuk iframe) - return file langsung
@@ -242,6 +290,8 @@ class ReviewController extends Controller
             $document = $submission->ringkasanEksekutif;
         } elseif ($documentType === 'laporan-utama') {
             $document = $submission->laporanUtama;
+        } elseif ($documentType === 'lampiran') {
+            $document = $submission->lampiran;
         }
 
         if (!$document) {
@@ -280,6 +330,8 @@ class ReviewController extends Controller
             $document = $submission->ringkasanEksekutif;
         } elseif ($documentType === 'laporan-utama') {
             $document = $submission->laporanUtama;
+        } elseif ($documentType === 'lampiran') {
+            $document = $submission->lampiran;
         }
 
         if (!$document) {
@@ -520,6 +572,7 @@ class ReviewController extends Controller
             'status.in' => 'Status review harus berupa approved atau rejected.',
             'catatan_admin.max' => 'Catatan admin maksimal 1000 karakter.',
         ]);
+        
 
         $result = $this->reviewService->evaluateDocument($submission, $documentType, $validated, $request->user()->id);
         return response()->json(['message'=>'Document reviewed successfully.','document'=>$result]);
